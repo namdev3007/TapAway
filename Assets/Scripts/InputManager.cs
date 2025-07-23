@@ -12,7 +12,8 @@ public class InputManager : MonoBehaviour
                 Block block = hit.collider.GetComponent<Block>();
                 if (block != null)
                 {
-                    block.TryMove();
+                    MoveCommand command = new MoveCommand(block);
+                    command.Execute();
                 }
             }
         }

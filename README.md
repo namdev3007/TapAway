@@ -10,7 +10,6 @@ Unity UI System – Xây dựng giao diện người chơi (Pause, WinPanel, Tog
 PlayerPrefs – Lưu dữ liệu người chơi như âm thanh và level đã mở.
 
 AudioManager – Quản lý nhạc nền (BGM) và hiệu ứng âm thanh (SFX).
-<img width="480" height="847" alt="image" src="https://github.com/user-attachments/assets/7548e00d-b18e-46f9-a62b-8c9713a2aef7" />
 🏆 Tính năng chính
 ✅ Nhiều level với độ khó tăng dần.
 
@@ -25,3 +24,4 @@ AudioManager – Quản lý nhạc nền (BGM) và hiệu ứng âm thanh (SFX).
 
 👤 Tác giả
 🧑‍💻 Nam Doan – Unity Developer
+![Uploading image.png…]()

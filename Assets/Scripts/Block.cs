@@ -1,171 +1,96 @@
 ﻿using DG.Tweening;
-using TMPro;
 using UnityEngine;
 
 public class Block : MonoBehaviour
 {
-    [Header("Cài đặt di chuyển")]
-    public Vector3 moveDirection = Vector3.right;
-    public float moveDistance = 3f;
-    public float moveDuration = 0.5f;
-    public Transform visualBlock; // ✅ Di chuyển phần hiển thị
+    public Vector3 moveDirection;
+    public Transform visualBlock;
 
-    [Header("Vật liệu phản hồi")]
-    public Material trueMaterial;
-    public Material falseMaterial;
-    public Material waitForMovesMaterial;
+    public Material correctMaterial;
+    public Material incorrectMaterial;
 
-    [Header("Chế độ đặc biệt")]
-    public bool waitForMoves = false;
-    public int requiredMovesBeforeActive = 0;
-    public TextMeshPro[] countdownTexts;
+    private IBlockObstacleChecker obstacleChecker;
 
-    private bool isMoving = false;
-    private bool canClick = true;
-    public bool shouldCount = true;
-
-    public Renderer blockRenderer;
+    public Renderer visualRenderer;
     private Material originalMaterial;
 
-    void Start()
+    private void Awake()
     {
-        if (blockRenderer != null)
-            originalMaterial = blockRenderer.material;
-
-        LevelManager.Instance?.RegisterBlock(this);
-        UpdateCountdownDisplay();
+        obstacleChecker = new OverlapBoxChecker();
     }
 
-    void Update()
+    private void Start()
     {
-        if (waitForMoves)
-            UpdateCountdownDisplay();
+        originalMaterial = visualRenderer.sharedMaterial;
+        AppearEffect(5f, 0.5f);
     }
 
-    public void UpdateCountdownDisplay()
+    public void Shake()
     {
-        int remaining = Mathf.Max(0, requiredMovesBeforeActive - GameManager.Instance.GetMoveCount());
-
-        if (remaining > 0)
+        if (visualBlock != null)
         {
-            foreach (var text in countdownTexts)
-            {
-                if (text != null)
-                {
-                    text.gameObject.SetActive(true);
-                    text.text = remaining.ToString();
-                }
-            }
-
-            if (blockRenderer != null && waitForMovesMaterial != null)
-                blockRenderer.material = waitForMovesMaterial;
-        }
-        else
-        {
-            foreach (var text in countdownTexts)
-            {
-                if (text != null)
-                    text.gameObject.SetActive(false);
-            }
-
-            ResetMaterial();
+            visualBlock.DOShakePosition(0.3f, 0.2f, 10, 90f).SetEase(Ease.OutQuad);
         }
     }
 
-    public bool IsMoving() => isMoving;
-    public void SetMoving(bool value) => isMoving = value;
-
-    public bool CanClick() => canClick;
-
-    public void TemporarilyDisableClick(float delay)
+    public void FlashMaterial(Material tempMaterial, float duration = 1f)
     {
-        canClick = false;
-        Invoke(nameof(EnableClick), delay);
-    }
+        if (visualRenderer == null || tempMaterial == null || originalMaterial == null)
+            return;
 
-    private void EnableClick()
-    {
-        canClick = true;
-    }
+        visualRenderer.material = tempMaterial;
 
-    public void SetMaterialTrue()
-    {
-        if (blockRenderer != null && trueMaterial != null)
-            blockRenderer.material = trueMaterial;
-    }
-
-    public void SetMaterialFalseTemporary()
-    {
-        if (blockRenderer != null && falseMaterial != null)
+        DOVirtual.DelayedCall(duration, () =>
         {
-            blockRenderer.material = falseMaterial;
-            Invoke(nameof(ResetMaterial), 0.5f);
-        }
-    }
-
-    public void ResetMaterial()
-    {
-        if (blockRenderer != null && originalMaterial != null)
-            blockRenderer.material = originalMaterial;
-    }
-
-    public void PlayBounceBackEffect()
-    {
-        if (isMoving || visualBlock == null) return;
-
-        Vector3 worldDirection = transform.TransformDirection(moveDirection.normalized);
-        Vector3 originalPos = visualBlock.position;
-        Vector3 bumpPos = originalPos + worldDirection * 0.3f;
-
-        SetMaterialFalseTemporary();
-        isMoving = true;
-
-        visualBlock.DOMove(bumpPos, 0.15f).SetEase(Ease.OutQuad).OnComplete(() =>
-        {
-            visualBlock.DOMove(originalPos, 0.15f).SetEase(Ease.InQuad).OnComplete(() =>
-            {
-                isMoving = false;
-            });
+            visualRenderer.material = originalMaterial;
         });
     }
 
-    public void DominoPush(Vector3 pushDirection, int depth = 0)
+    public void AppearEffect(float flyDistance = 5f, float duration = 0.5f)
     {
-        if (depth > 5 || visualBlock == null) return;
+        if (visualBlock == null) return;
 
-        float pushAmount = 0.3f;
-        Vector3 targetPosition = visualBlock.position + pushDirection.normalized * pushAmount;
-        Vector3 originalPos = visualBlock.position;
+        Vector3 randomOffset = Random.onUnitSphere;
+        randomOffset.y = Mathf.Abs(randomOffset.y);
+        randomOffset.Normalize();
+        randomOffset *= flyDistance;
 
-        isMoving = true;
+        Vector3 targetPos = visualBlock.localPosition;
 
-        visualBlock.DOMove(targetPosition, 0.1f).SetEase(Ease.Linear).OnComplete(() =>
-        {
-            visualBlock.DOMove(originalPos, 0.1f).SetEase(Ease.Linear).OnComplete(() =>
-            {
-                isMoving = false;
+        visualBlock.localPosition = targetPos + randomOffset;
+        visualBlock.localScale = Vector3.zero;
 
-                if (Physics.Raycast(transform.position, pushDirection, out RaycastHit hit, 1f))
-                {
-                    Block nextBlock = hit.collider.GetComponent<Block>();
-                    if (nextBlock != null && !nextBlock.IsMoving())
-                    {
-                        nextBlock.DominoPush(pushDirection, depth + 1);
-                    }
-                }
-            });
-        });
+        visualBlock.DOLocalMove(targetPos, duration).SetEase(Ease.OutBack);
+        visualBlock.DOScale(Vector3.one, duration).SetEase(Ease.OutBack);
     }
 
-    public void DebugInfo() =>
-        Debug.Log($"[BLOCK] {name} - MoveDirection: {moveDirection}, IsMoving: {isMoving}");
+    public float GetAvailableMoveDistance()
+    {
+        return obstacleChecker.GetDistanceUntilBlocked(this);
+    }
 
-    public void LogStartMove() =>
-        Debug.Log($"[BLOCK] {name} bắt đầu di chuyển.");
+    public Block GetBlockedBlock()
+    {
+        return obstacleChecker.GetFirstBlockInDirection(this);
+    }
 
-    public void LogBlocked(string colliderName) =>
-        Debug.LogWarning($"[BLOCK] {name} bị chặn bởi: {colliderName}");
+    private void OnDrawGizmosSelected()
+    {
+#if UNITY_EDITOR
+        Gizmos.color = Color.yellow;
 
-    public void LogDestroyed() =>
-        Debug.Log($"[BLOCK] {name} đã hoàn tất di chuyển và bị xoá.");
+        if (moveDirection == Vector3.zero) return;
+
+        float step = 2f;
+        int steps = 4; // Số bước kiểm tra
+        Vector3 halfExtents = transform.localScale / 2f * 0.9f;
+
+        for (int i = 1; i <= steps; i++)
+        {
+            Vector3 center = transform.position + moveDirection.normalized * step * i;
+            Gizmos.DrawWireCube(center, halfExtents * 2);
+        }
+#endif
+    }
+
 }

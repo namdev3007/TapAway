@@ -2,67 +2,45 @@
 
 public class GameManager : MonoBehaviour
 {
-    public static GameManager Instance;
+    public static GameManager Instance { get; private set; }
 
-    public int moveCount = 0;
-
-    private GameObject currentLevel;
+    [Header("Level Info")]
     public int currentLevelIndex = 1;
+
+    private const string LevelKey = "CurrentLevel";
 
     private void Awake()
     {
-        if (Instance == null) Instance = this;
-        else Destroy(gameObject);
-    }
+        Instance = this;
 
-    void Start()
-    {
-        LoadLevel(currentLevelIndex);
+        // Lấy level từ PlayerPrefs, nếu không có thì mặc định là 1
+        currentLevelIndex = PlayerPrefs.GetInt(LevelKey, 1);
     }
-
-    public void IncrementMove()
-    {
-        moveCount++;
-        Debug.Log($"📦 Move Count: {moveCount}");
-    }
-
-    public int GetMoveCount() => moveCount;
 
     public void LoadLevel(int index)
     {
-        moveCount = 0;
+        currentLevelIndex = index;
+        PlayerPrefs.SetInt(LevelKey, currentLevelIndex);
+        PlayerPrefs.Save();
 
-        if (currentLevel != null)
-            Destroy(currentLevel);
-
-        string levelName = $"Levels/Level_{index}";
-        GameObject levelPrefab = Resources.Load<GameObject>(levelName);
-
-        if (levelPrefab != null)
-        {
-            currentLevel = Instantiate(levelPrefab, this.transform);
-            Debug.Log($"✅ Loaded level {index}");
-        }
-        else
-        {
-            Debug.LogError($"❌ Không tìm thấy prefab: {levelName}");
-        }
-    }
-
-    public void OnLevelCompleted()
-    {
-        Debug.Log("🎉 Hoàn thành màn chơi!");
-        Invoke(nameof(NextLevel), 1.5f);
+        LevelManager.Instance.LoadLevel(index);
     }
 
     public void NextLevel()
     {
-        currentLevelIndex++;
-        LoadLevel(currentLevelIndex);
+        LoadLevel(++currentLevelIndex);
+        AudioManager.Instance.PlaySFX(1);
     }
 
     public void RestartLevel()
     {
+        LoadLevel(currentLevelIndex);
+    }
+
+    public void ResetProgress()
+    {
+        PlayerPrefs.DeleteKey(LevelKey);
+        currentLevelIndex = 1;
         LoadLevel(currentLevelIndex);
     }
 }

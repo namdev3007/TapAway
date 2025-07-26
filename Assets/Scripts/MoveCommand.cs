@@ -1,9 +1,11 @@
-﻿using DG.Tweening;
-using UnityEngine;
+﻿using UnityEngine;
+using DG.Tweening;
 
 public class MoveCommand
 {
     private Block block;
+    private float maxMoveDistance = 5f;
+    private float moveDuration = 0.5f;
 
     public MoveCommand(Block block)
     {
@@ -12,56 +14,54 @@ public class MoveCommand
 
     public void Execute()
     {
-        if (block == null || block.IsMoving() || !block.CanClick()) return;
+        if (block == null || !LevelManager.Instance.canInteract) return;
 
-        // 🔒 Kiểm tra lượt di chuyển yêu cầu
-        if (block.waitForMoves && GameManager.Instance.GetMoveCount() < block.requiredMovesBeforeActive)
+        LevelManager.Instance.canInteract = false;
+
+        Vector3 startPos = block.transform.position;
+        float allowedDistance = block.GetAvailableMoveDistance();
+        Vector3 targetPos = startPos + block.moveDirection * allowedDistance;
+
+        if (allowedDistance >= maxMoveDistance)
         {
-            Debug.LogWarning($"⛔ {block.name} chưa thể di chuyển! Cần ít nhất {block.requiredMovesBeforeActive} lượt.");
-            block.PlayBounceBackEffect();
-            block.TemporarilyDisableClick(1f); // ⏳ Chặn click lại trong 1s
-            return;
-        }
+            Vector3 finalPos = startPos + block.moveDirection * maxMoveDistance;
 
-        Vector3 worldDirection = block.transform.TransformDirection(block.moveDirection.normalized);
-
-        // ✅ Không có vật cản
-        if (!Physics.Raycast(block.transform.position, worldDirection, out RaycastHit hit, 1f))
-        {
-            block.LogStartMove();
-            block.SetMaterialTrue();
-            block.SetMoving(true);
-
-            Vector3 targetPos = block.visualBlock.position + worldDirection * block.moveDistance;
-
-            block.visualBlock.DOMove(targetPos, block.moveDuration)
-                .SetEase(Ease.InOutQuad)
+            block.transform.DOMove(finalPos, moveDuration)
+                .SetEase(Ease.OutBack)
                 .OnComplete(() =>
                 {
-                    if (block == null) return;
+                    Collider col = block.GetComponent<Collider>();
+                    if (col != null)
+                        col.enabled = false;
 
-                    block.SetMoving(false);
-                    block.LogDestroyed();
+                    GameObject.Destroy(block.gameObject);
+                    LevelManager.Instance.CheckWinCondition();
 
-                    GameManager.Instance?.IncrementMove();
-                    LevelManager.Instance?.UnregisterBlock(block);
+                    AudioManager.Instance.PlaySFX(0); // 🔊 phát âm thanh khi move thành công
 
-                    Object.Destroy(block.gameObject);
+                    DOVirtual.DelayedCall(0.6f, () => LevelManager.Instance.canInteract = true);
                 });
         }
         else
         {
-            // 🚫 Có vật cản
-            block.LogBlocked(hit.collider.name);
-            block.PlayBounceBackEffect();
-            block.TemporarilyDisableClick(1f); // ⏳ Chặn click lại trong 1s
+            float moveTime = moveDuration * (allowedDistance / maxMoveDistance);
+            Block blockedBlock = block.GetBlockedBlock();
 
-            if (hit.collider.TryGetComponent<Block>(out Block hitBlock))
-            {
-                hitBlock.DominoPush(worldDirection);
-            }
+            block.transform.DOMove(targetPos, moveTime)
+                .SetEase(Ease.InCubic)
+                .OnComplete(() =>
+                {
+                    block.transform.DOMove(startPos, moveTime)
+                        .SetEase(Ease.OutCubic);
+
+                    block.Shake();
+                    block.FlashMaterial(block.incorrectMaterial);
+                    blockedBlock?.Shake();
+
+                    AudioManager.Instance.PlaySFX(0); // 🔊 phát âm thanh khi move thất bại
+
+                    DOVirtual.DelayedCall(0.6f, () => LevelManager.Instance.canInteract = true);
+                });
         }
-
-        block.DebugInfo();
     }
 }

@@ -1,41 +1,98 @@
 ﻿using UnityEngine;
-using System.Collections;
 
 public class LevelManager : MonoBehaviour
 {
-    public static LevelManager Instance;
+    public static LevelManager Instance { get; private set; }
 
-    private int blockCount = 0;
+    public Transform levelParent;
+    public CameraOrbit cameraOrbit;
+
+    private GameObject currentLevel;
+
+    public bool canInteract = true;
+
+    public GameObject[] firework;
 
     private void Awake()
     {
         Instance = this;
     }
 
-    public void RegisterBlock(Block block)
+    public void LoadLevel(int levelIndex)
     {
-        if (block.shouldCount)
+        if (currentLevel != null)
+            Destroy(currentLevel);
+
+        string levelPath = $"Levels/Level_{levelIndex}";
+        GameObject prefab = Resources.Load<GameObject>(levelPath);
+
+        currentLevel = Instantiate(prefab, levelParent);
+
+        LevelCameraSettings settings = currentLevel.GetComponentInChildren<LevelCameraSettings>();
+ 
+        cameraOrbit.SetLevel(settings);
+ 
+  
+    }
+
+    public void CheckWinCondition()
+    {
+        if (currentLevel == null) return;
+
+        int childCount = currentLevel.transform.childCount;
+        Debug.Log($"🔍 Số đối tượng còn lại trong level: {childCount}");
+
+        if (childCount == 1)
         {
-            blockCount++;
-            Debug.Log($"🧱 Đăng ký Block: Tổng cộng = {blockCount}");
+            StartCoroutine(ShowWinAfterDelay());
+
+            PlayFireworkEffect();
         }
     }
 
-    public void UnregisterBlock(Block block)
+    private System.Collections.IEnumerator ShowWinAfterDelay()
     {
-        if (block.shouldCount)
-        {
-            blockCount--;
-            Debug.Log($"🧱 Block còn lại: {blockCount}");
+        yield return new WaitForSeconds(1f);
+        UIManager.Instance.ShowWinPanel();
+    }
 
-            if (blockCount <= 0)
-                StartCoroutine(DelayLevelComplete());
+
+    private void PlayFireworkEffect()
+    {
+        AudioManager.Instance.PlaySFX(2);
+        foreach (GameObject fw in firework)
+        {
+            if (fw != null)
+            {
+                fw.SetActive(true); // Bật pháo hoa
+
+                // Phát hiệu ứng nếu có ParticleSystem
+                ParticleSystem ps = fw.GetComponent<ParticleSystem>();
+                if (ps != null)
+                {
+                    ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    ps.Play();
+                }
+            }
+        }
+
+        StartCoroutine(HideFireworksAfterDelay(0.7f));
+    }
+
+    private System.Collections.IEnumerator HideFireworksAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+
+        foreach (GameObject fw in firework)
+        {
+            if (fw != null)
+                fw.SetActive(false);
         }
     }
 
-    private IEnumerator DelayLevelComplete()
+
+    public GameObject GetCurrentLevel()
     {
-        yield return null; // chờ 1 frame
-        GameManager.Instance?.OnLevelCompleted();
+        return currentLevel;
     }
 }
